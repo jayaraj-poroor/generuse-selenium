@@ -1,4 +1,4 @@
-(defproject org.generuse/generuse-selenium "0.1.1-SNAPSHOT"
+(defproject org.generuse/generuse-selenium "0.1.3-SNAPSHOT"
   :description "Generuse selenium module"
   :url "http://generuse.org"
   :license {:name "Eclipse Public License"
