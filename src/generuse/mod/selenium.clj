@@ -15,7 +15,7 @@
    	)
 )
 
-(def open-browser_ {:name "open" :target-type :web_browser})
+(def open-browser_ {:names ["open"] :target-type :web_browser})
 (defn ^{:axon open-browser_} open-browser[target-eval param-evals 
 											ctx globals & more]
 	(let [driver (FirefoxDriver.)]
@@ -28,7 +28,7 @@
 	)
 )
 
-(def shows-browser_ {:name "shows" :target-type :web_browser})
+(def shows-browser_ {:names ["shows"] :target-type :web_browser})
 (defn ^{:axon shows-browser_} shows-browser[target-eval param-evals 
 											ctx globals & more]
 	(let [driver (:value (deref-eval target-eval))]
@@ -40,7 +40,7 @@
 )
 
 
-(def input-address-bar_ {:name "input" :target-type :web_address-bar})
+(def input-address-bar_ {:names ["input"] :target-type :web_address-bar})
 (defn ^{:axon input-address-bar_} input-address-bar[target-eval param-evals 
 														ctx globals & more]
 	(let [target (deref-eval target-eval)
