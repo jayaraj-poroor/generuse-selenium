@@ -6,14 +6,26 @@
    	)
 )
 
-(def open-browser_ {:name "open" :target-type :web_browser})
-(defn ^{:axon open-browser_} open-browser[target-eval param-evals 
+(def opens-browser_ {:name "opens" :target-type :web_browser})
+(defn ^{:axon opens-browser_} open-browser[target-eval param-evals 
 											ctx globals & more]
 	(let [driver (FirefoxDriver.)]
-		(dosync 
+		(dosync
+		    (alter (:value target-eval) assoc :value driver) 
 			(alter globals assoc "address-bar"
 				(ref {:type :web_address-bar :value driver})
 			)
+		)
+	)
+)
+
+(def shows-browser_ {:name "shows" :target-type :web_browser})
+(defn ^{:axon shows-browser_} shows-browser[target-eval param-evals 
+											ctx globals & more]
+	(let [driver (:value (deref-eval target-eval))]
+		(if (.contains (.toString driver) "null")
+			{:value false :type :boolean :pass false}
+			{:value true :type :boolean :pass true}			
 		)
 	)
 )
