@@ -15,8 +15,8 @@
    	)
 )
 
-(def opens-browser_ {:name "opens" :target-type :web_browser})
-(defn ^{:axon opens-browser_} open-browser[target-eval param-evals 
+(def open-browser_ {:name "open" :target-type :web_browser})
+(defn ^{:axon open-browser_} open-browser[target-eval param-evals 
 											ctx globals & more]
 	(let [driver (FirefoxDriver.)]
 		(dosync
