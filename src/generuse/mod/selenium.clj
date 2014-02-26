@@ -11,7 +11,7 @@
 	(:gen-class)
    	(:use [generuse.lib.exec :only (deref-eval)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
-   			 (org.openqa.selenium By)   			
+   			 (org.openqa.selenium By NoSuchElementException)
    	)
 )
 
@@ -21,9 +21,6 @@
 	(let [driver (FirefoxDriver.)]
 		(dosync
 		    (alter (:value target-eval) assoc :value {:driver driver}) 
-			(alter globals assoc "address-bar"
-				(ref {:type :web_address-bar :value {:driver driver}})
-			)
 		)
 	)
 )
@@ -44,35 +41,24 @@
 (defn ^{:axon input-address-bar_} input-address-bar[target-eval param-evals 
 														ctx globals & more]
 	(let [target (deref-eval target-eval)
-		  driver (:driver (:value target))
+		  browser (@globals (:value target))
+		  driver (when browser (:driver (:value @browser)))
 		  url    (:value (deref-eval (:with param-evals)))
 		 ]
 		 (if driver
 			(.get driver url)
+            (throw (ex-info "Browser not open."))						
 		 )
 	)
 )
 
-
-(def input_ {:names ["input"] :target-type :web_html})
-(defn ^{:axon input-address-bar_} input-address-bar[target-eval param-evals 
-														ctx globals & more]
-	(let [target (deref-eval target-eval)
-		  driver (:driver (:value target))
-		  url    (:value (deref-eval (:with param-evals)))
-		 ]
-		 (if driver
-			(.get driver url)
-            (throw (ex-info "Browser not open."))			
-		 )
-	)
-)
 
 (def read-address-bar_ {:names ["read"] :target-type :web_address-bar})
 (defn ^{:axon read-address-bar_} read-address-bar[target-eval param-evals 
 														ctx globals & more]
 	(let [target (deref-eval target-eval)
-		  driver (:driver (:value target))
+		  browser (@globals (:value target))
+		  driver (when browser (:driver (:value @browser)))
 		 ]
 		 (if driver
 		 	{:value
@@ -80,6 +66,34 @@
 			 :type :string 
 			}
             (throw (ex-info "Browser not open."))			
+		 )
+	)
+)
+
+
+(def show-html_ {:names ["show", "is-shown?"] :target-type :web_html})
+(defn ^{:axon show-html_} show-html[target-eval param-evals 
+														ctx globals & more]
+	(let [target (deref-eval target-eval)
+		  browser (@globals (:value target))
+		  gs-name (str "gs-" ((:objref target-eval) 0))
+		  x       (println "gs-name: " gs-name)
+		  driver (when browser (:driver (:value @browser)))
+		 ]
+		 (if driver
+		 	(let [  xpath-expr (str "//*[@" gs-name "]")
+		 			elem (try (.findElement driver (By/xpath xpath-expr) )
+		 					  (catch NoSuchElementException e 
+		 					  		nil
+		 					  )
+		 				 )
+		 		 ]
+		 		 (if elem
+		 		 	{:type :boolean :pass true :value true}
+		 		 	{:type :boolean :pass false :value false}
+		 		 )
+		 	)
+			(throw (ex-info "Browser not open."))					 	
 		 )
 	)
 )
