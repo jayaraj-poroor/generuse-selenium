@@ -41,7 +41,11 @@
 (defn ^{:axon input-address-bar_} input-address-bar[target-eval param-evals 
 														ctx globals & more]
 	(let [target (deref-eval target-eval)
-		  browser (@globals (:value target))
+		  target-val (:value target)		
+		  browser-name (if (string? target-val) target-val 
+		  	               (:browser target-val)
+		  	           )
+		  browser (@globals browser-name)
 		  driver (when browser (:driver (:value @browser)))
 		  url    (:value (deref-eval (:with param-evals)))
 		 ]
@@ -57,7 +61,11 @@
 (defn ^{:axon read-address-bar_} read-address-bar[target-eval param-evals 
 														ctx globals & more]
 	(let [target (deref-eval target-eval)
-		  browser (@globals (:value target))
+		  target-val (:value target)
+		  browser-name (if (string? target-val) target-val 
+		  	               (:browser target-val)
+		  	           )
+		  browser (@globals browser-name)
 		  driver (when browser (:driver (:value @browser)))
 		 ]
 		 (if driver
@@ -70,19 +78,26 @@
 	)
 )
 
+(defn get-gs-name[obj-eval idx]
+	((:objref obj-eval) idx)
+)
 
 (def show-html_ {:names ["show", "is-shown?"] :target-type :web_html})
 (defn ^{:axon show-html_} show-html[target-eval param-evals 
 														ctx globals & more]
 	(let [target (deref-eval target-eval)
-		  browser (@globals (:value target))
-		  gs-name (str "gs-" ((:objref target-eval) 0))
-		  x       (println "gs-name: " gs-name)
+		  target-val (:value target)		
+		  browser-name (if (string? target-val) target-val 
+		  	               (:browser target-val)
+		  	           )
+		  browser (@globals browser-name)
+		  gs-name (get-gs-name target-eval 0)
 		  driver (when browser (:driver (:value @browser)))
 		 ]
 		 (if driver
-		 	(let [  xpath-expr (str "//*[@" gs-name "]")
-		 			elem (try (.findElement driver (By/xpath xpath-expr) )
+		 	(let [  ;xpath (str "//*[@" gs-name "]")
+		 		    sel  (str "[gs=" gs-name "]")
+		 			elem (try (.findElement driver (By/cssSelector sel) )
 		 					  (catch NoSuchElementException e 
 		 					  		nil
 		 					  )
@@ -92,6 +107,71 @@
 		 		 	{:type :boolean :pass true :value true}
 		 		 	{:type :boolean :pass false :value false}
 		 		 )
+		 	)
+			(throw (ex-info "Browser not open."))					 	
+		 )
+	)
+)
+
+
+(defn input-batch[elem vals]
+	(println "input batch")
+	(let [sel 	"[gs]"
+		  elems (.findElements elem (By/cssSelector sel))
+		 ]
+		 (doall 
+		 	(map
+		 		#(let [name 	 (.getAttribute % "gs")
+		 			   input-val (vals name)
+		 			  ]
+		 			  (when input-val
+		 			  	  	(.sendKeys % (into-array [input-val]))
+		 			  )
+		 		 )
+		 		elems
+		 	)
+		 )
+	) 
+)
+
+(def input-html_ {:names ["input"] :target-type :web_html})
+(defn ^{:axon input-html_} input-html[target-eval param-evals 
+														ctx globals & more]
+	(let [target 		(deref-eval target-eval)
+		  target-val 	(:value target)	
+		  input-val     (:value (:with param-evals))	
+		  browser-name 	(if (string? target-val) target-val 
+		  	            	(:browser target-val)
+		  	           	)
+		  browser 		(@globals browser-name)
+		  driver 		(when browser (:driver (:value @browser)))
+		  n-objref 		(count (:objref target-eval))
+		 ]
+		 (if driver
+		 	(loop [ idx  0 elem driver]
+		 		  (if (and (< idx n-objref) elem)
+	  	 		  	(let [ sel  (str "[gs=" (get-gs-name target-eval idx) "]")
+	  	 		  		   elem (try (.findElement elem (By/cssSelector sel))
+	  	 		  		   			 (catch NoSuchElementException e 
+	  	 		  		   			 	nil
+	  	 		  		   			 )
+	  	 		  		   	    )
+	  	 		  		 ]
+	 		  	  		(recur  (+ idx 1) elem)
+	 		  		)
+ 		  			(if elem
+						(do
+							(cond 
+			 		  	  		(string? input-val)
+			 		  	  		(.sendKeys elem input-val)		 		  	  		
+			 		  	  		(map? input-val)
+			 		  	  		(input-batch elem input-val)
+			 		  	  	)
+							{:type :boolean :value false :pass false}
+		 		  	  	)
+	 		  	  		{:type :boolean :value false :pass false}
+	 		  	  	)
+		 		  )
 		 	)
 			(throw (ex-info "Browser not open."))					 	
 		 )
