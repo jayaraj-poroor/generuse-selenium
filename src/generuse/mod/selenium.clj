@@ -48,8 +48,8 @@
 											ctx globals & more]
 	(let [driver (get-in (deref-eval target-eval) [:value :driver] )]
 		(if (and driver (not (.contains (.toString driver) "null")))
-			{:value true :type :boolean :pass true}
-			{:value false :type :boolean :pass false}			
+			{:value true :type Boolean :pass true}
+			{:value false :type Boolean :pass false}			
 		)
 	)
 )
@@ -89,7 +89,7 @@
 		 (if driver
 		 	{:value
 				(.executeScript driver "return location.href;" (into-array []))
-			 :type :string 
+			 :type String
 			}
             (throw (ex-info "Browser not open."))			
 		 )
@@ -104,8 +104,8 @@
 (defn ^{:axon show-html_} show-html[target-eval param-evals 
 														ctx globals & more]
 	(if (locate-elem target-eval globals)
-	 	{:type :boolean :pass true :value true}
-	 	{:type :boolean :pass false :value false}
+	 	{:type Boolean :pass true :value true}
+	 	{:type Boolean :pass false :value false}
 	)
 )
 
@@ -118,6 +118,10 @@
 		 	(map
 		 		#(let [name 	 (.getAttribute % "gs")
 		 			   input-val (get-* vals name)
+		 			   input-val (if (string? input-val) 
+		 			   				 input-val 
+		 			   				 (:value (deref-eval input-val))
+		 			   			 )
 		 			  ]
 		 			  (when input-val
 		 			  	  	(.sendKeys % (into-array [input-val]))
@@ -164,20 +168,21 @@
 (def input-html_ {:names ["input"] :target-type :web_html})
 (defn ^{:axon input-html_} input-html[target-eval param-evals 
 														ctx globals & more]
-	(let [input-val     (:value (deref-eval (:with param-evals)))	
+	(let [input-vals    (:value (deref-eval (:with param-evals)))
+		  input-vals 	(if input-vals input-vals param-evals)
 		  elem 			(locate-elem target-eval globals)
 		 ]
 		(if elem
 			(do
 				(cond 
-		  	  		(string? input-val)
-		  	  		(.sendKeys elem input-val)		 		  	  		
-		  	  		(map? input-val)
-		  	  		(input-batch elem input-val)
+		  	  		(string? input-vals)
+		  	  		(.sendKeys elem (into-array [input-vals]))		 		  	  		
+		  	  		(map? input-vals)
+		  	  		(input-batch elem input-vals)
 			  	)
-				{:type :boolean :value true :pass true}
+				{:type Boolean :value true :pass true}
 		  	)
-  	  		{:type :boolean :value false :pass false}
+  	  		{:type Boolean :value false :pass false}
   	  	)
 	)
 )
@@ -191,9 +196,9 @@
 		(if elem
 			(do
 				(.click elem)
-				{:type :boolean :value true :pass true}
+				{:type Boolean :value true :pass true}
 		  	)
-  	  		{:type :boolean :value false :pass false}
+  	  		{:type Boolean :value false :pass false}
   	  	)
 	)
 )
