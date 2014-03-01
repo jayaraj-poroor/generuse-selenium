@@ -9,7 +9,7 @@
 
 (ns generuse.mod.selenium
 	(:gen-class)
-   	(:use [generuse.lib.exec :only (deref-eval get-*)])	
+   	(:use [generuse.lib.exec :only (deref-eval)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
    			 (org.openqa.selenium By NoSuchElementException)
    			 (java.util.concurrent TimeUnit)
@@ -117,7 +117,7 @@
 		 (doall 
 		 	(map
 		 		#(let [name 	 (.getAttribute % "gs")
-		 			   input-val (get-* vals name)
+		 			   input-val (vals name)
 		 			   input-val (if (string? input-val) 
 		 			   				 input-val 
 		 			   				 (:value (deref-eval input-val))
