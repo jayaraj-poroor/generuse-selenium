@@ -11,7 +11,7 @@
 	(:gen-class)
    	(:use [generuse.lib.exec :only (deref-eval)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
-   			 (org.openqa.selenium By NoSuchElementException)
+   			 (org.openqa.selenium By NoSuchElementException Keys)
    			 (java.util.concurrent TimeUnit)
    	)
 )
@@ -124,6 +124,7 @@
 		 			   			 )
 		 			  ]
 		 			  (when input-val
+		 			  		(.clear %)
 		 			  	  	(.sendKeys % (into-array [input-val]))
 		 			  )
 		 		 )
@@ -176,7 +177,10 @@
 			(do
 				(cond 
 		  	  		(string? input-vals)
-		  	  		(.sendKeys elem (into-array [input-vals]))		 		  	  		
+		  	  		(do
+						(.clear elem)
+ 			  	  		(.sendKeys elem (into-array [input-vals]))
+ 			  	  	)
 		  	  		(map? input-vals)
 		  	  		(input-batch elem input-vals)
 			  	)
