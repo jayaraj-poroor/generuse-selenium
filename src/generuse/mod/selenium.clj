@@ -9,7 +9,7 @@
 
 (ns generuse.mod.selenium
 	(:gen-class)
-   	(:use [generuse.lib.exec :only (deref-eval)])	
+   	(:use [generuse.lib.exec :only (deref-eval defaxon)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
 			 (org.openqa.selenium.chrome ChromeDriver)
 			 (org.openqa.selenium.ie InternetExplorerDriver)
@@ -68,9 +68,7 @@
 	)
 )
 
-(def open-browser_ {:names ["open"] :target-type :web_browser})
-(defn ^{:axon open-browser_} open-browser[target-eval param-evals 
-											ctx globals & more]
+(defaxon :web_browser ["open"]
 	(let [target-obj    (deref-eval target-eval)
 		  init-value 	(if (string? (:value target-obj))
 		  					(:value target-obj)
@@ -88,9 +86,7 @@
 	)
 )
 
-(def show-browser_ {:names ["show", "is-shown?"] :target-type :web_browser})
-(defn ^{:axon show-browser_} show-browser[target-eval param-evals 
-											ctx globals & more]
+(defaxon :web_browser ["show" "is-shown?"]
 	(let [driver (get-in (deref-eval target-eval) [:value :driver] )]
 		(if (and driver (not (.contains (.toString driver) "null")))
 			{:value true :type Boolean :pass true}
@@ -100,9 +96,7 @@
 )
 
 
-(def input-address-bar_ {:names ["input"] :target-type :web_address-bar})
-(defn ^{:axon input-address-bar_} input-address-bar[target-eval param-evals 
-														ctx globals & more]
+(defaxon :web_address-bar ["input"]
 	(let [target (deref-eval target-eval)
 		  target-val (:value target)		
 		  browser-name (if (string? target-val) target-val 
@@ -119,10 +113,7 @@
 	)
 )
 
-
-(def read-address-bar_ {:names ["read"] :target-type :web_address-bar})
-(defn ^{:axon read-address-bar_} read-address-bar[target-eval param-evals 
-														ctx globals & more]
+(defaxon :web_address-bar ["read"]														
 	(let [target (deref-eval target-eval)
 		  target-val (:value target)
 		  browser-name (if (string? target-val) target-val 
@@ -145,9 +136,7 @@
 	(refs idx)
 )
 
-(def show-html_ {:names ["show", "is-shown?"] :target-type :web_html})
-(defn ^{:axon show-html_} show-html[target-eval param-evals 
-														ctx globals & more]
+(defaxon :web_html ["show" "is-shown?"]
 	(if (locate-elem target-eval globals)
 	 	{:type Boolean :pass true :value true}
 	 	{:type Boolean :pass false :value false}
@@ -211,9 +200,7 @@
 	)	
 )
 
-(def input-html_ {:names ["input"] :target-type :web_html})
-(defn ^{:axon input-html_} input-html[target-eval param-evals 
-														ctx globals & more]
+(defaxon :web_html ["input"]														
 	(let [input-vals    (:value (deref-eval (:with param-evals)))
 		  input-vals 	(if input-vals input-vals param-evals)
 		  elem 			(locate-elem target-eval globals)
@@ -236,9 +223,7 @@
 	)
 )
 
-(def click-html_ {:names ["click"] :target-type :web_html})
-(defn ^{:axon click-html_} click-html[target-eval param-evals 
-														ctx globals & more]
+(defaxon :web_html ["click"]
 	(let [input-val     (:value (deref-eval (:with param-evals)))	
 		  elem 			(locate-elem target-eval globals)
 		 ]

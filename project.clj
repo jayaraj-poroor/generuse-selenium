@@ -15,7 +15,7 @@
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.seleniumhq.selenium/selenium-java "2.39.0"]
                  [com.opera/operadriver "1.5"]
-                 [org.generuse/generuse-lib "0.1.0-SNAPSHOT"]
+                 [org.generuse/generuse-lib "0.1.0-SNAPSHOT"]                 
    				]
   :main generuse.mod.selenium
   :aot  [generuse.mod.selenium]
