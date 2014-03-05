@@ -11,17 +11,52 @@
 	(:gen-class)
    	(:use [generuse.lib.exec :only (deref-eval)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
+			 (org.openqa.selenium.chrome ChromeDriver)
+			 (org.openqa.selenium.ie InternetExplorerDriver)
+			 (org.openqa.selenium.safari SafariDriver)
    			 (org.openqa.selenium By NoSuchElementException Keys)
    			 (java.util.concurrent TimeUnit)
    	)
+   	(:require [clojure.string :as str])   	
 )
 
 (declare locate-elem)
 
-(defn set-driver-options [driver obj-eval globals]
+(def web-drivers 
+	{
+		"firefox"	#(FirefoxDriver.)
+		"chrome"  	#(ChromeDriver.)
+		"safari"  	#(SafariDriver.)
+		"explorer"	#(InternetExplorerDriver.)
+	}
+)
+
+(defn create-driver [browser-eval init-value globals]
+	(def obj (deref-eval browser-eval))
+	(when (= init-value "chrome")
+		  (if (:driver obj)
+		  	  (System/setProperty "webdriver.chrome.driver" (:driver obj))
+		  	  (throw (ex-info "The property 'driver' must point to chrome driver exe "
+		  	  	               "in gso file"
+		  	  	     )
+		  	  )
+		  )
+	)
+
 	(let [
-		  obj-eval      (deref-eval obj-eval)
-		  timeout-param (try (Long/parseLong (:timeout obj-eval)) 
+		  driver 		(if (web-drivers init-value) 
+		  					((web-drivers init-value))
+				            (throw (ex-info (str "WebDriver for: " init-value 
+				                                 " not found. Supported: " 
+				                                 (str/join "," 
+				                                 	       (keys web-drivers)
+				                                  )
+				                            )
+				            				{}
+				                    )
+				            )		  					
+		  				)		  
+		  timeout-param (try (Long/parseLong (:timeout obj)) 
 		  					 (catch NumberFormatException e 
 		  						    nil
 		  					 )
@@ -29,16 +64,26 @@
 		  timeout       (if timeout-param timeout-param 10)
 		 ]
 		(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
+		driver
 	)
 )
 
 (def open-browser_ {:names ["open"] :target-type :web_browser})
 (defn ^{:axon open-browser_} open-browser[target-eval param-evals 
 											ctx globals & more]
-	(let [driver (FirefoxDriver.)]
-		(set-driver-options driver target-eval globals)
+	(let [target-obj    (deref-eval target-eval)
+		  init-value 	(if (string? (:value target-obj))
+		  					(:value target-obj)
+		  					(:init-value target-obj)
+		  	            )
+		  driver 		(create-driver target-eval init-value globals)		  
+		 ]
 		(dosync
-		    (alter (:value target-eval) assoc :value {:driver driver}) 
+		    (alter (:value target-eval) 
+		    		assoc 
+		    		:value {:driver driver}
+ 					:init-value init-value		    		
+		    ) 
 		)
 	)
 )
@@ -91,7 +136,7 @@
 				(.executeScript driver "return location.href;" (into-array []))
 			 :type String
 			}
-            (throw (ex-info "Browser not open."))			
+            (throw (ex-info "Browser not open." {}))			
 		 )
 	)
 )
