@@ -9,7 +9,7 @@
 
 (ns generuse.mod.selenium
 	(:gen-class)
-   	(:use [generuse.lib.exec :only (deref-eval defaxon)])	
+   	(:use [generuse.lib.exec :only (deref-eval defaxon to-eval)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
 			 (org.openqa.selenium.chrome ChromeDriver)
 			 (org.openqa.selenium.ie InternetExplorerDriver)
@@ -17,7 +17,9 @@
    			 (org.openqa.selenium By NoSuchElementException Keys)
    			 (java.util.concurrent TimeUnit)
    	)
-   	(:require [clojure.string :as str])   	
+   	(:require [clojure.string :as str]
+			  [clojure.data.json :as json]		   		
+   	)   	
 )
 
 (declare locate-elem)
@@ -236,6 +238,19 @@
 	)
 )
 
+
+(defaxon :web_html ["enter"]
+	(let [elem  (locate-elem target-eval globals false)]
+		(if elem
+			(do
+				(.sendKeys elem (into-array [Keys/RETURN]))
+				{:type Boolean :value true :pass true}				
+			)
+  	  		{:type Boolean :value false :pass false}
+  	  	)
+	)
+)
+
 (defaxon :web_html ["click"]
 	(let [input-val     (:value (deref-eval (:with param-evals)))	
 		  elem 			(locate-elem target-eval globals false)
@@ -247,5 +262,29 @@
 		  	)
   	  		{:type Boolean :value false :pass false}
   	  	)
+	)
+)
+
+(defaxon :web_local-storage ["pick"]
+	(let [target 		(deref-eval target-eval)
+		  target-val 	(:value target)	
+		  browser-name 	(if (string? target-val) target-val 
+		  	            	(:browser target-val)
+		  	           	)
+		  browser 		(@globals browser-name)
+		  driver 		(when browser (:driver (:value @browser)))
+		  store-key     (:value (deref-eval (param-evals :with)))
+		  script        (str "return window.localStorage.getItem('" store-key "');")
+		]
+		(def res (.executeScript driver  script (into-array [])))
+		(if res
+			(to-eval (try (json/read-str res)
+						  (catch Exception e
+						  	 res
+						  )
+					 )
+			)
+			{:type Boolean :value false :pass false}
+		)
 	)
 )
