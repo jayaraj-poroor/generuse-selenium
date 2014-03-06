@@ -31,6 +31,10 @@
 	}
 )
 
+(defn set-driver-timeout [driver timeout]
+	(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
+)
+
 (defn create-driver [browser-eval init-value globals]
 	(def obj (deref-eval browser-eval))
 	(when (= init-value "chrome")
@@ -43,7 +47,7 @@
 		  )
 	)
 
-	(let [
+	(let [default-timeout 10
 		  driver 		(if (web-drivers init-value) 
 		  					((web-drivers init-value))
 				            (throw (ex-info (str "WebDriver for: " init-value 
@@ -56,14 +60,14 @@
 				                    )
 				            )		  					
 		  				)		  
-		  timeout-param (try (Long/parseLong (:timeout obj)) 
+		  timeout 		(try (Long/parseLong (:timeout obj)) 
 		  					 (catch NumberFormatException e 
-		  						    nil
+		  						default-timeout
 		  					 )
 		  	            )
-		  timeout       (if timeout-param timeout-param 10)
 		 ]
-		(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
+		(dosync (alter (:value browser-eval) assoc :timeout timeout))
+		(set-driver-timeout driver timeout)
 		driver
 	)
 )
@@ -137,7 +141,7 @@
 )
 
 (defaxon :web_html ["show" "is-shown?"]
-	(if (locate-elem target-eval globals)
+	(if (locate-elem target-eval globals (= (:actor ctx) "_pre"))
 	 	{:type Boolean :pass true :value true}
 	 	{:type Boolean :pass false :value false}
 	)
@@ -168,7 +172,7 @@
 	) 
 )
 
-(defn locate-elem[obj-eval, globals]
+(defn locate-elem[obj-eval, globals, short-wait?]
 	(let [obj 			(deref-eval obj-eval)
 		  obj-val 		(:value obj)	
 		  browser-name 	(if (string? obj-val) obj-val 
@@ -181,8 +185,12 @@
 		  	            )
 		  start-elem    (if (:elem obj-val) (:elem obj-val) driver)
 		  n-refs 		(count refs)
-		 ]		 
+		  short-wait-secs 1
+		 ]
 		 (when (not driver) (throw (ex-info "Browser not open")))
+		 (when short-wait?
+		 	(set-driver-timeout driver short-wait-secs)
+		 )		 		 
 	 	 (loop  [idx  0 elem start-elem]
 	 		    (if (and (< idx n-refs) elem)
 	  	 		  	(let [ sel  (str "[gs=" (get-gs-name refs idx) "]")
@@ -194,7 +202,12 @@
 	  	 		  		 ]
 	 		  	  		(recur  (+ idx 1) elem)
 	 		  		)
-	 		  		elem
+	 		  		(do
+						(when short-wait?
+		 					(set-driver-timeout driver (:timeout @browser))
+		 				)		 		 
+	 		  			elem
+	 		  		)
  		  	  	)
 	 	 ) 
 	)	
@@ -203,7 +216,7 @@
 (defaxon :web_html ["input"]														
 	(let [input-vals    (:value (deref-eval (:with param-evals)))
 		  input-vals 	(if input-vals input-vals param-evals)
-		  elem 			(locate-elem target-eval globals)
+		  elem 			(locate-elem target-eval globals false)
 		 ]
 		(if elem
 			(do
@@ -225,7 +238,7 @@
 
 (defaxon :web_html ["click"]
 	(let [input-val     (:value (deref-eval (:with param-evals)))	
-		  elem 			(locate-elem target-eval globals)
+		  elem 			(locate-elem target-eval globals false)
 		 ]
 		(if elem
 			(do
