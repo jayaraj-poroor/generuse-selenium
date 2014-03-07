@@ -15,8 +15,12 @@
 			 (org.openqa.selenium.ie InternetExplorerDriver)
 			 (org.openqa.selenium.safari SafariDriver)
 			 (org.openqa.selenium WebElement)
-   			 (org.openqa.selenium By NoSuchElementException Keys)
+   			 (org.openqa.selenium By NoSuchElementException Keys
+   			 					  StaleElementReferenceException
+   			 )
+   			 (org.openqa.selenium.interactions Actions)
    			 (java.util.concurrent TimeUnit)
+   			 (java.util Random)
    	)
    	(:require [clojure.string :as str]
 			  [clojure.data.json :as json]		   		
@@ -33,6 +37,8 @@
 		"explorer"	#(InternetExplorerDriver.)
 	}
 )
+
+(def short-wait-secs 1)
 
 (defn set-driver-timeout [driver timeout]
 	(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
@@ -147,17 +153,42 @@
 	(instance? WebElement e)
 )
 
+(defn is-table?[e]
+	(when (is-web-element? e) 
+	 	  (.getAttribute e "gs-table")
+	) 	
+)
+
+(defn small-delay[obj-eval globals]
+	(try (Thread/sleep 1000)
+		(catch InterruptedException e nil)
+	)
+)
+
 (defaxon :web_html ["show" "is-shown?"]
 	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))
 		  value (:value (deref-eval (:with param-evals)))
+		  check-value (fn []
+						(if value
+							(if (= (.getText elem) value)
+					 			{:type Boolean :pass true :value true}
+					 			{:type Boolean :pass false :value false}
+					 		)
+					 		{:type Boolean :pass true :value true}
+					 	)		  	
+		  			  )
 		 ]
 		(if (is-web-element? elem)
-			(if value
-				(if (= (.getText elem) value)
-		 			{:type Boolean :pass true :value true}
-		 			{:type Boolean :pass false :value false}
-		 		)
-		 		{:type Boolean :pass true :value true}
+			(if (.isDisplayed elem)
+				(check-value)
+			 	(do
+			 		(small-delay target-eval globals)
+			 		(if (.isDisplayed elem)
+			 			(check-value)
+				 		{:type Boolean :pass false :value false 
+				 	 	:reason "Element exists but not visible"}
+			 	 	)
+			 	)
 		 	)
 		 	{:type Boolean :pass false :value false :reason elem}
 		)
@@ -201,56 +232,62 @@
 	)
 )
 
-(defn locate-elem[obj-eval, globals, short-wait?]
-	(let [obj 			(deref-eval obj-eval)
+(defn get-browser[obj-eval globals]
+	(let[ obj 			(deref-eval obj-eval)
 		  obj-val 		(:value obj)	
 		  browser-name 	(if (string? obj-val) obj-val 
 		  	            	(:browser obj-val)
 		  	           	)
 		  browser 		(@globals browser-name)
-		  driver 		(when browser (:driver (:value @browser)))
+		]
+		browser
+	)
+)
+
+(defn get-web-driver [browser]
+	(when browser (:driver (:value @browser)))
+)
+
+(defn locate-elem[obj-eval, globals, short-wait?]
+	(let [obj 			(deref-eval obj-eval)
+		  obj-val 		(:value obj)	
+		  browser 		(get-browser obj-eval globals)		  
+		  driver 		(get-web-driver browser)
 		  refs          (if (:elem obj-val) (:subref obj-eval)
-		  	                                   (:objref obj-eval)
+		  	                                (:objref obj-eval)
 		  	            )
 		  start-elem    (if (:elem obj-val) (:elem obj-val) driver)
 		  n-refs 		(count refs)
-		  short-wait-secs 1
 		 ]
-		 (when (not driver) (throw (ex-info "Browser not open")))
+		 (when (not driver) (throw (ex-info "Browser not open" {})))
 		 (when short-wait?
 		 	(set-driver-timeout driver short-wait-secs)
 		 )		 		 
 	 	 (loop  [idx  0 elem start-elem]
-	 	 		(def is-table? (when (is-web-element? elem) 
-	 	 							 (.getAttribute elem "gs-table")
-	 	 					   ) 
-	 	 		)
 	 		    (if (and (< idx n-refs) elem)
 	 		    	(let [row-elems 
-		 		    		(when is-table?
+		 		    		(when (is-table? elem)
 		 		    			(try (.findElements elem 
 		 		    								(By/cssSelector "[gs-row]")
 		 		    				 )
-		  	 		  		   		 (catch NoSuchElementException e 
-		  	 		  		   		 	nil
-		  	 		  		   		 )
+		  	 		  		   		 (catch NoSuchElementException e nil )
+		  	 		  		   		 (catch StaleElementReferenceException e nil)
 		  	 		  		   	)
 		  	 		  		)
 	 		    		]
-		 		    	(if is-table?
+		 		    	(if (is-table? elem)
 		 		    		(if row-elems
-		 		    			(do
-		 		    				(def row-idx (to-index (refs idx)))
-		 		    				(def elem 
-		 		    					(try
-		 		    						(.get row-elems row-idx)
-		 		    						(catch IndexOutOfBoundsException e
-		 		    							nil
-		 		    						)
-		 		    					)
-		 		    				)
-		 		    				(recur (+ idx 1) elem)
-		 		    			)
+	 		    				(let [row-idx (to-index (refs idx))
+		 		    				  elem 
+			 		    				  (try
+			 		    					(.get row-elems row-idx)
+			 		    					(catch IndexOutOfBoundsException e
+			 		    							nil
+			 		    					)
+		 		    					  )
+		 		    				]
+	 		    					(recur (+ idx 1) elem)			 		    					
+	 		    				)		 		    				
 		 		    			(do (assert (> idx 0))
 				 		    		(str "Expecting rows in " (refs (dec idx)) 
 				 		    			 " but not found."
@@ -262,6 +299,9 @@
 			  	 		  									(By/cssSelector sel)
 			  	 		  					   )
 			  	 		  		   			 (catch NoSuchElementException e 
+			  	 		  		   			 	nil
+			  	 		  		   			 )
+			  	 		  		   			 (catch StaleElementReferenceException e
 			  	 		  		   			 	nil
 			  	 		  		   			 )
 			  	 		  		   	    )
@@ -321,14 +361,40 @@
 (defaxon :web_html ["click"]
 	(let [input-val     (:value (deref-eval (:with param-evals)))	
 		  elem 			(locate-elem target-eval globals false)
+		  browser 		(get-browser target-eval globals)		  
+		  driver 		(get-web-driver browser)
+		  actions 		(when driver (Actions. driver))
 		 ]
-		(if (is-web-element? elem)
-			(do
-				(.click elem)
+		 (when (not driver)
+		 	(throw (ex-info "Browser not open" {}))
+		 )
+		 (if (is-web-element? elem)
+			 (do
+				(-> actions (.moveToElement elem) .click .build .perform)
 				{:type Boolean :value true :pass true}
-		  	)
-  	  		{:type Boolean :value false :pass false :reason elem}
-  	  	)
+		  	 )
+  	  		 {:type Boolean :value false :pass false :reason elem}
+  	  	 )
+	)
+)
+
+(defaxon :web_html ["mouse-over"]
+	(let [input-val     (:value (deref-eval (:with param-evals)))	
+		  elem 			(locate-elem target-eval globals false)
+		  browser 		(get-browser target-eval globals)		  
+		  driver 		(get-web-driver browser)
+		  actions 		(when driver (Actions. driver))
+		 ]
+		 (when (not driver)
+		 	(throw (ex-info "Browser not open" {}))
+		 )
+		 (if (is-web-element? elem)
+			 (do
+				(-> actions (.moveToElement elem) .build .perform)
+				{:type Boolean :value true :pass true}
+		  	 )
+  	  		 {:type Boolean :value false :pass false :reason elem}
+  	  	 )
 	)
 )
 
@@ -342,8 +408,15 @@
 		  driver 		(when browser (:driver (:value @browser)))
 		  store-key     (:value (deref-eval (param-evals :with)))
 		  script        (str "return window.localStorage.getItem('" store-key "');")
+		  res 			(.executeScript driver  script (into-array []))
+		  res           (if res 
+		  					res 
+		  					(do
+		  						(small-delay)
+								(.executeScript driver  script (into-array []))		  						
+		  					)
+		  				)
 		]
-		(def res (.executeScript driver  script (into-array [])))
 		(if res
 			(to-eval (try (json/read-str res)
 						  (catch Exception e
@@ -351,7 +424,78 @@
 						  )
 					 )
 			)
-			{:type Boolean :value false :pass false}
+			{:type Boolean :value false :pass false 
+			 :reason (str "Local storage lookup failed for key: " store-key)}
 		)
 	)
+)
+
+(defaxon :web_html ["pick-any"]
+	(let [elem 			 (locate-elem target-eval globals false)
+		  target-value   (:value (deref-eval target-eval))
+		  browser-name   (if (string? target-value) target-value 
+		 					(:browser target-value)
+		 				 )
+		 ]
+		(if (is-table? elem)
+			(do
+				(let [rows
+						(try (.findElements elem 
+											(By/cssSelector "[gs-row]")
+							 )
+			  		   		 (catch NoSuchElementException e nil)
+			  		   	)
+		  		     rnd (Random. (System/currentTimeMillis))
+			  		]
+			  		(if rows
+			  			(do
+		  				    (def idx (.nextInt rnd (count rows)))
+		  				    {
+		  				    	:value {:elem (.get rows idx)
+		  				    			:browser browser-name
+		  				    		   }
+		  				    	:type :web_html
+		  				    }
+				  		)
+					 	{:type Boolean :pass false :value false 
+					 	 :reason (str "Web table has no rows: " 
+					 	 	          (str/join "'s" (:objref target-eval))
+					 	 	     )
+					 	}		  			
+			  		)			  		
+		  		)
+			)
+		 	{:type Boolean :pass false :value false 
+		 	 :reason (str "Web element is not table: " 
+		 	 	          (str/join "'s" (:objref target-eval))
+		 	 	     )
+		 	}
+		)
+	)
+)
+
+(defaxon :web_html ["remove"]
+	(let [elem 			 (locate-elem target-eval globals false)
+		  browser 		 (get-browser target-eval globals)		  
+		  driver 		 (get-web-driver browser)
+		  elem 			 (when elem
+ 								(set-driver-timeout driver short-wait-secs)
+		  						(try (.getLocation elem)
+		  							 (catch StaleElementReferenceException e
+		  								nil
+		  							 )
+		  							 (finally
+		  							 	(println "FINALLY IS EXECUTED")
+		 								(set-driver-timeout driver 
+		 													(:timeout @browser)
+		 								)
+		  							 )
+		  						)
+		  				 )
+		 ]
+		 (if elem
+		 	{:type Boolean :value false :pass false}
+		 	{:type Boolean :value true :pass true}
+		 )
+    )
 )
