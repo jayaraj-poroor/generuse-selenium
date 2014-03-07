@@ -14,6 +14,7 @@
 			 (org.openqa.selenium.chrome ChromeDriver)
 			 (org.openqa.selenium.ie InternetExplorerDriver)
 			 (org.openqa.selenium.safari SafariDriver)
+			 (org.openqa.selenium WebElement)
    			 (org.openqa.selenium By NoSuchElementException Keys)
    			 (java.util.concurrent TimeUnit)
    	)
@@ -142,10 +143,24 @@
 	(refs idx)
 )
 
+(defn is-web-element?[e]
+	(instance? WebElement e)
+)
+
 (defaxon :web_html ["show" "is-shown?"]
-	(if (locate-elem target-eval globals (= (:actor ctx) "_pre"))
-	 	{:type Boolean :pass true :value true}
-	 	{:type Boolean :pass false :value false}
+	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))
+		  value (:value (deref-eval (:with param-evals)))
+		 ]
+		(if (is-web-element? elem)
+			(if value
+				(if (= (.getText elem) value)
+		 			{:type Boolean :pass true :value true}
+		 			{:type Boolean :pass false :value false}
+		 		)
+		 		{:type Boolean :pass true :value true}
+		 	)
+		 	{:type Boolean :pass false :value false :reason elem}
+		)
 	)
 )
 
@@ -174,6 +189,18 @@
 	) 
 )
 
+(defn to-index[sel-spec]
+	(condp = sel-spec
+		"first" 	0
+		"second" 	1
+		(let [n (re-find #"\d+" sel-spec)
+			  n (try (Long/parseLong n) (catch NumberFormatException e 0))
+			 ]
+			 n
+		)
+	)
+)
+
 (defn locate-elem[obj-eval, globals, short-wait?]
 	(let [obj 			(deref-eval obj-eval)
 		  obj-val 		(:value obj)	
@@ -194,16 +221,56 @@
 		 	(set-driver-timeout driver short-wait-secs)
 		 )		 		 
 	 	 (loop  [idx  0 elem start-elem]
+	 	 		(def is-table? (when (is-web-element? elem) 
+	 	 							 (.getAttribute elem "gs-table")
+	 	 					   ) 
+	 	 		)
 	 		    (if (and (< idx n-refs) elem)
-	  	 		  	(let [ sel  (str "[gs=" (get-gs-name refs idx) "]")
-	  	 		  		   elem (try (.findElement elem (By/cssSelector sel))
-	  	 		  		   			 (catch NoSuchElementException e 
-	  	 		  		   			 	nil
-	  	 		  		   			 )
-	  	 		  		   	    )
-	  	 		  		 ]
-	 		  	  		(recur  (+ idx 1) elem)
-	 		  		)
+	 		    	(let [row-elems 
+		 		    		(when is-table?
+		 		    			(try (.findElements elem 
+		 		    								(By/cssSelector "[gs-row]")
+		 		    				 )
+		  	 		  		   		 (catch NoSuchElementException e 
+		  	 		  		   		 	nil
+		  	 		  		   		 )
+		  	 		  		   	)
+		  	 		  		)
+	 		    		]
+		 		    	(if is-table?
+		 		    		(if row-elems
+		 		    			(do
+		 		    				(def row-idx (to-index (refs idx)))
+		 		    				(def elem 
+		 		    					(try
+		 		    						(.get row-elems row-idx)
+		 		    						(catch IndexOutOfBoundsException e
+		 		    							nil
+		 		    						)
+		 		    					)
+		 		    				)
+		 		    				(recur (+ idx 1) elem)
+		 		    			)
+		 		    			(do (assert (> idx 0))
+				 		    		(str "Expecting rows in " (refs (dec idx)) 
+				 		    			 " but not found."
+				 		    		)
+			 		    		)	 		    			
+		 		    		)
+				 		  	(let [ sel (str "[gs=" (get-gs-name refs idx) "]")
+			  	 		  			elem (try (.findElement elem 
+			  	 		  									(By/cssSelector sel)
+			  	 		  					   )
+			  	 		  		   			 (catch NoSuchElementException e 
+			  	 		  		   			 	nil
+			  	 		  		   			 )
+			  	 		  		   	    )
+			  	 		  		 ]
+			 		  	  		(recur  (+ idx 1) elem)
+			 		  		)
+		 		    	)
+	 		    	)
+	  	
 	 		  		(do
 						(when short-wait?
 		 					(set-driver-timeout driver (:timeout @browser))
@@ -220,7 +287,7 @@
 		  input-vals 	(if input-vals input-vals param-evals)
 		  elem 			(locate-elem target-eval globals false)
 		 ]
-		(if elem
+		(if (is-web-element? elem)
 			(do
 				(cond 
 		  	  		(string? input-vals)
@@ -233,7 +300,7 @@
 			  	)
 				{:type Boolean :value true :pass true}
 		  	)
-  	  		{:type Boolean :value false :pass false}
+  	  		{:type Boolean :value false :pass false :reason elem}
   	  	)
 	)
 )
@@ -241,12 +308,12 @@
 
 (defaxon :web_html ["enter"]
 	(let [elem  (locate-elem target-eval globals false)]
-		(if elem
+		(if (is-web-element? elem)
 			(do
 				(.sendKeys elem (into-array [Keys/RETURN]))
 				{:type Boolean :value true :pass true}				
 			)
-  	  		{:type Boolean :value false :pass false}
+  	  		{:type Boolean :value false :pass false :reason elem}
   	  	)
 	)
 )
@@ -255,12 +322,12 @@
 	(let [input-val     (:value (deref-eval (:with param-evals)))	
 		  elem 			(locate-elem target-eval globals false)
 		 ]
-		(if elem
+		(if (is-web-element? elem)
 			(do
 				(.click elem)
 				{:type Boolean :value true :pass true}
 		  	)
-  	  		{:type Boolean :value false :pass false}
+  	  		{:type Boolean :value false :pass false :reason elem}
   	  	)
 	)
 )
