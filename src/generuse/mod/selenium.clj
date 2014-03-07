@@ -38,7 +38,7 @@
 	}
 )
 
-(def short-wait-secs 1)
+(def short-wait-secs 2)
 
 (defn set-driver-timeout [driver timeout]
 	(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
@@ -160,7 +160,7 @@
 )
 
 (defn small-delay[obj-eval globals]
-	(try (Thread/sleep 1000)
+	(try (Thread/sleep (* short-wait-secs 1000))
 		(catch InterruptedException e nil)
 	)
 )
@@ -485,7 +485,6 @@
 		  								nil
 		  							 )
 		  							 (finally
-		  							 	(println "FINALLY IS EXECUTED")
 		 								(set-driver-timeout driver 
 		 													(:timeout @browser)
 		 								)
