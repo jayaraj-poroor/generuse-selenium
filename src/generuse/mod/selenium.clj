@@ -332,8 +332,15 @@
 				(cond 
 		  	  		(string? input-vals)
 		  	  		(do
-						(.clear elem)
- 			  	  		(.sendKeys elem (into-array [input-vals]))
+		  	  			(try
+							(.clear elem)
+	 			  	  		(.sendKeys elem (into-array [input-vals]))
+							(catch Exception e 
+								{:type Boolean :value false :pass false
+								 :reason (.getMessage e) :exception e
+								}
+							)	 			  	  		
+ 			  	  		)
  			  	  	)
 		  	  		(map? input-vals)
 		  	  		(input-batch elem input-vals)
@@ -350,7 +357,14 @@
 	(let [elem  (locate-elem target-eval globals false)]
 		(if (is-web-element? elem)
 			(do
-				(.sendKeys elem (into-array [Keys/RETURN]))
+				(try
+					(.sendKeys elem (into-array [Keys/RETURN]))
+					(catch Exception e 
+						{:type Boolean :value false :pass false
+						 :reason (.getMessage e) :exception e
+						}
+					)					
+				)
 				{:type Boolean :value true :pass true}				
 			)
   	  		{:type Boolean :value false :pass false :reason elem}
@@ -370,7 +384,14 @@
 		 )
 		 (if (is-web-element? elem)
 			 (do
-				(-> actions (.moveToElement elem) .click .build .perform)
+			 	(try
+					(-> actions (.moveToElement elem) .click .build .perform)
+					(catch Exception e 
+						{:type Boolean :value false :pass false
+						 :reason (.getMessage e) :exception e
+						}
+					)
+				)
 				{:type Boolean :value true :pass true}
 		  	 )
   	  		 {:type Boolean :value false :pass false :reason elem}
@@ -390,7 +411,13 @@
 		 )
 		 (if (is-web-element? elem)
 			 (do
-				(-> actions (.moveToElement elem) .build .perform)
+			 	(try
+					(-> actions (.moveToElement elem) .build .perform)
+					(catch Exception e
+						{:type Boolean :value true :pass false 
+						 :reason (.getMessage e) :exception e}
+					)
+				)
 				{:type Boolean :value true :pass true}
 		  	 )
   	  		 {:type Boolean :value false :pass false :reason elem}
@@ -444,6 +471,7 @@
 											(By/cssSelector "[gs-row]")
 							 )
 			  		   		 (catch NoSuchElementException e nil)
+			  		   		 (catch StaleElementReferenceException e nil)
 			  		   	)
 		  		     rnd (Random. (System/currentTimeMillis))
 			  		]
