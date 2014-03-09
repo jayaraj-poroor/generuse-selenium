@@ -179,6 +179,15 @@
    	)
 )
 
+(defn find-displayed-rows[elem]
+	(into []
+		(filter
+			#(.isDisplayed %)
+			(find-rows elem)
+		)
+	)
+)
+
 (defn find-elem[elem child-name]
 	(let [	sel  (str "[gs=" child-name "]")
   		   	elem (try (.findElement elem 
@@ -232,10 +241,10 @@
 
 (defmethod content-matches? :seq [elem content-eval reason]
 	(if (is-table? elem)
-		(let [rows (find-rows elem) row-idx (atom 0) n-rows (count rows)]
+		(let [rows (find-displayed-rows elem) row-idx (atom 0) n-rows (count rows)]
 			(every?
 				#(let [r (when (< @row-idx n-rows)
-					   		   (content-matches? (.get rows @row-idx) % reason)
+					   		   (content-matches? (nth rows @row-idx) % reason)
 					     )
 					]
 					(swap! row-idx inc)
@@ -253,7 +262,7 @@
 
 (defmethod content-matches? :nil [elem content-eval reason]
 	(if (is-table? elem)
-		(= (count (find-rows elem)) 0)
+		(= (count (find-displayed-rows elem)) 0)
 		(do
 			(reset! reason "Matching nil content to a non-table element")
 			false
@@ -387,13 +396,13 @@
 		 )		 		 
 	 	 (loop  [idx  0 elem start-elem]
 	 		    (if (and (< idx n-refs) elem)
-	 		    	(let [row-elems (when (is-table? elem) (find-rows elem)) ]
+	 		    	(let [row-elems (when (is-table? elem) (find-displayed-rows elem)) ]
 		 		    	(if (is-table? elem)
 		 		    		(if row-elems
 	 		    				(let [row-idx (to-index (refs idx) row-elems)
 		 		    				  elem 
 			 		    				  (try
-			 		    					(.get row-elems row-idx)
+			 		    					(nth row-elems row-idx)
 			 		    					(catch IndexOutOfBoundsException e
 			 		    							nil
 			 		    					)
@@ -568,14 +577,8 @@
 		 ]
 		(if (is-table? elem)
 			(do
-				(let [rows
-						(try (.findElements elem 
-											(By/cssSelector "[gs-row]")
-							 )
-			  		   		 (catch NoSuchElementException e nil)
-			  		   		 (catch StaleElementReferenceException e nil)
-			  		   	)
-		  		     rnd (Random. (System/currentTimeMillis))
+				(let [rows (find-displayed-rows elem)
+		  		      rnd (Random. (System/currentTimeMillis))
 			  		]
 			  		(if rows
 			  			(do
