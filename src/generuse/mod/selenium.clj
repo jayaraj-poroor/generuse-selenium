@@ -145,10 +145,6 @@
 	)
 )
 
-(defn get-gs-name[refs idx]
-	(refs idx)
-)
-
 (defn is-web-element?[e]
 	(instance? WebElement e)
 )
@@ -174,15 +170,102 @@
 	)
 )
 
+(defn find-rows[elem]
+	(try (.findElements elem 
+						(By/cssSelector "[gs-row]")
+		 )
+   		 (catch NoSuchElementException e nil )
+   		 (catch StaleElementReferenceException e nil)
+   	)
+)
+
+(defn find-elem[elem child-name]
+	(let [	sel  (str "[gs=" child-name "]")
+  		   	elem (try (.findElement elem 
+  									(By/cssSelector sel)
+  					   )
+  		   			 (catch NoSuchElementException e 
+  		   			 	nil
+  		   			 )
+  		   			 (catch StaleElementReferenceException e
+  		   			 	nil
+  		   			 )
+  		   	    )
+		]
+		elem
+	)
+)
+
+(defmulti content-matches?
+		  (fn[elem content-eval reason] 
+		  	 (:type (deref-eval content-eval))
+		  )
+)
+
+(defmethod content-matches? String [elem content-eval reason]
+	(= (.getText elem) (:value (deref-eval content-eval)))
+)
+
+(defmethod content-matches? :map [elem content-eval reason]
+	(every?
+		#(let [ename (first %) evalue (second %)]
+			(if (= ename :type) ;ignore :type entry 
+				true
+				(let [child (find-elem elem ename)]
+					(when child
+						(content-matches? child evalue reason)
+					)
+				)
+			)
+		)
+		content-eval		
+	)
+)
+
+(defmethod content-matches? :seq [elem content-eval reason]
+	(if (is-table? elem)
+		(let [rows (find-rows elem) row-idx (atom 0) n-rows (count rows)]
+			(every?
+				#(when (< row-idx n-rows)
+					   (content-matches? (.get rows row-idx) % reason)
+				)
+				(:value (deref-eval content-eval))
+			)
+		)
+		(do
+			(reset! reason "Element not a table")
+			false
+		)
+	)
+)
+
+(defmethod content-matches? :nil [elem content-eval reason]
+	(if (is-table? elem)
+		(= (count (find-rows elem)) 0)
+		(do
+			(reset! reason "Matching nil content to a non-table element")
+			false
+		)
+	)
+)
+
+(defmethod content-matches? :default [elem content-eval reason]
+	(reset! reason (str "Unsupported content type: " 
+		                (:type (deref-eval content-eval)) 
+		            )
+	)
+	false
+)
+
 (defaxon :web_html ["show" "is-shown?"]
 	(let [elem 		 (locate-elem target-eval globals (= (:actor ctx) "_pre"))
-		  with-value (:value (deref-eval (:with param-evals)))
+		  with-param (deref-eval (:with param-evals))
 		  check-value (fn []
-						(if with-value
-							(if (= (.getText elem) with-value)
-					 			{:type Boolean :pass true :value true}
-					 			{:type Boolean :pass false :value false}
-					 		)
+						(if with-param
+					 		(let [reason (atom nil)
+					 			  res (content-matches? elem with-param reason)]
+					 			{:type Boolean :pass res :value res :reason @reason}
+					 		)							
 					 		(let [res (style-matches? elem param-evals)]
 					 			{:type Boolean :pass res :value res}
 					 		)
@@ -276,16 +359,7 @@
 		 )		 		 
 	 	 (loop  [idx  0 elem start-elem]
 	 		    (if (and (< idx n-refs) elem)
-	 		    	(let [row-elems 
-		 		    		(when (is-table? elem)
-		 		    			(try (.findElements elem 
-		 		    								(By/cssSelector "[gs-row]")
-		 		    				 )
-		  	 		  		   		 (catch NoSuchElementException e nil )
-		  	 		  		   		 (catch StaleElementReferenceException e nil)
-		  	 		  		   	)
-		  	 		  		)
-	 		    		]
+	 		    	(let [row-elems (when (is-table? elem) (find-rows elem)) ]
 		 		    	(if (is-table? elem)
 		 		    		(if row-elems
 	 		    				(let [row-idx (to-index (refs idx))
@@ -305,18 +379,7 @@
 				 		    		)
 			 		    		)	 		    			
 		 		    		)
-				 		  	(let [ sel (str "[gs=" (get-gs-name refs idx) "]")
-			  	 		  			elem (try (.findElement elem 
-			  	 		  									(By/cssSelector sel)
-			  	 		  					   )
-			  	 		  		   			 (catch NoSuchElementException e 
-			  	 		  		   			 	nil
-			  	 		  		   			 )
-			  	 		  		   			 (catch StaleElementReferenceException e
-			  	 		  		   			 	nil
-			  	 		  		   			 )
-			  	 		  		   	    )
-			  	 		  		 ]
+				 		  	(let [ elem (find-elem elem (refs idx))]
 			 		  	  		(recur  (+ idx 1) elem)
 			 		  		)
 		 		    	)
