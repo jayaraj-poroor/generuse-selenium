@@ -439,7 +439,7 @@
 		  res           (if res 
 		  					res 
 		  					(do
-		  						(small-delay)
+		  						(small-delay target-eval globals)
 								(.executeScript driver  script (into-array []))		  						
 		  					)
 		  				)
@@ -525,4 +525,13 @@
 		 	{:type Boolean :value true :pass true}
 		 )
     )
+)
+
+(defaxon :web_html ["read"]
+	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))]
+		(if (is-web-element? elem)
+			{:value (.getText elem) :type String}
+		 	{:type Boolean :pass false :value false :reason elem}
+		)
+	)
 )
