@@ -165,16 +165,27 @@
 	)
 )
 
+(defn style-matches? [elem param-evals]
+	(every?
+		#(let [param-name (first %) param-val (-> % second deref-eval :value)]
+			(= (.getCssValue elem param-name) param-val)
+		)
+		param-evals
+	)
+)
+
 (defaxon :web_html ["show" "is-shown?"]
-	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))
-		  value (:value (deref-eval (:with param-evals)))
+	(let [elem 		 (locate-elem target-eval globals (= (:actor ctx) "_pre"))
+		  with-value (:value (deref-eval (:with param-evals)))
 		  check-value (fn []
-						(if value
-							(if (= (.getText elem) value)
+						(if with-value
+							(if (= (.getText elem) with-value)
 					 			{:type Boolean :pass true :value true}
 					 			{:type Boolean :pass false :value false}
 					 		)
-					 		{:type Boolean :pass true :value true}
+					 		(let [res (style-matches? elem param-evals)]
+					 			{:type Boolean :pass res :value res}
+					 		)
 					 	)		  	
 		  			  )
 		 ]
@@ -535,3 +546,15 @@
 		)
 	)
 )
+
+(defaxon :web_html ["select" "is-selected?"]
+	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))]
+		(if (is-web-element? elem)
+			(let [is-selected? (.isSelected elem)]
+				{:type Boolean :value is-selected? :pass is-selected?}
+			)
+		 	{:type Boolean :pass false :value false :reason elem}
+		)
+	)
+)
+
