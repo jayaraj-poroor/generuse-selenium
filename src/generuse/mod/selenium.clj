@@ -203,17 +203,21 @@
 )
 
 (defmethod content-matches? String [elem content-eval reason]
-	(= (.getText elem) (:value (deref-eval content-eval)))
+	(let [r (= (.getText elem) (:value (deref-eval content-eval)))]
+		r
+	)
 )
 
 (defmethod content-matches? Boolean [elem content-eval reason]
-	(= (.isSelected elem) (:value (deref-eval content-eval)))
+	(let [r (= (.isSelected elem) (:value (deref-eval content-eval)))]
+		r
+	)
 )
 
 (defmethod content-matches? :map [elem content-eval reason]
 	(every?
 		#(let [ename (first %) evalue (second %)]
-			(if (= ename :type) ;ignore :type entry 
+			(if (keyword? ename) ;ignore :type entry 
 				true
 				(let [child (find-elem elem ename)]
 					(when child
@@ -230,8 +234,12 @@
 	(if (is-table? elem)
 		(let [rows (find-rows elem) row-idx (atom 0) n-rows (count rows)]
 			(every?
-				#(when (< row-idx n-rows)
-					   (content-matches? (.get rows row-idx) % reason)
+				#(let [r (when (< @row-idx n-rows)
+					   		   (content-matches? (.get rows @row-idx) % reason)
+					     )
+					]
+					(swap! row-idx inc)
+					r
 				)
 				(:value (deref-eval content-eval))
 			)
@@ -262,33 +270,48 @@
 )
 
 (defaxon :web_html ["show" "is-shown?"]
-	(let [elem 		 (locate-elem target-eval globals (= (:actor ctx) "_pre"))
+	(let [is-check?  (when (= (:action ctx) "show") true)
+		  elem 		 (locate-elem target-eval globals (= (:actor ctx) "_pre"))
 		  with-param (deref-eval (:with param-evals))
 		  check-value (fn []
 						(if with-param
 					 		(let [reason (atom nil)
 					 			  res (content-matches? elem with-param reason)]
-					 			{:type Boolean :pass res :value res :reason @reason}
+					 			{:type Boolean :pass (when is-check? res)
+					 			 :value res :reason @reason}
 					 		)							
 					 		(let [res (style-matches? elem param-evals)]
-					 			{:type Boolean :pass res :value res}
+					 			{:type Boolean :pass (when is-check? res)
+					 			 :value res}
 					 		)
 					 	)		  	
 		  			  )
 		 ]
 		(if (is-web-element? elem)
 			(if (.isDisplayed elem)
-				(check-value)
+				(do
+					(let [r-eval (check-value)]
+						(if (:value r-eval)
+							r-eval
+							(do
+								(small-delay target-eval globals)
+								(check-value)
+							)
+						)
+					)
+			 	)
 			 	(do
 			 		(small-delay target-eval globals)
 			 		(if (.isDisplayed elem)
 			 			(check-value)
-				 		{:type Boolean :pass false :value false 
-				 	 	:reason "Element exists but not visible"}
+				 		{:type Boolean :pass (when is-check? false)
+				 		 :value false 
+				 	 	 :reason "Element exists but not visible"}
 			 	 	)
 			 	)
 		 	)
-		 	{:type Boolean :pass false :value false :reason elem}
+		 	{:type Boolean :pass (when is-check? false)
+		 	 :value false :reason elem}
 		)
 	)
 )
@@ -318,10 +341,11 @@
 	) 
 )
 
-(defn to-index[sel-spec]
+(defn to-index[sel-spec row-elems]
 	(condp = sel-spec
 		"first" 	0
 		"second" 	1
+		"last"      (dec (count row-elems))
 		(let [n (re-find #"\d+" sel-spec)
 			  n (try (Long/parseLong n) (catch NumberFormatException e 0))
 			 ]
@@ -366,7 +390,7 @@
 	 		    	(let [row-elems (when (is-table? elem) (find-rows elem)) ]
 		 		    	(if (is-table? elem)
 		 		    		(if row-elems
-	 		    				(let [row-idx (to-index (refs idx))
+	 		    				(let [row-idx (to-index (refs idx) row-elems)
 		 		    				  elem 
 			 		    				  (try
 			 		    					(.get row-elems row-idx)
