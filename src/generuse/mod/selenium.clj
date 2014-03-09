@@ -100,10 +100,11 @@
 )
 
 (defaxon :web_browser ["show" "is-shown?"]
-	(let [driver (get-in (deref-eval target-eval) [:value :driver] )]
+	(let [ is-check?  (when (= (:action ctx) "show") true)
+		   driver (get-in (deref-eval target-eval) [:value :driver] ) ]
 		(if (and driver (not (.contains (.toString driver) "null")))
-			{:value true :type Boolean :pass true}
-			{:value false :type Boolean :pass false}			
+			{:value true :type Boolean :pass (when is-check? true)}
+			{:value false :type Boolean :pass (when is-check? false)}
 		)
 	)
 )
@@ -164,7 +165,10 @@
 (defn style-matches? [elem param-evals]
 	(every?
 		#(let [param-name (first %) param-val (-> % second deref-eval :value)]
-			(= (.getCssValue elem param-name) param-val)
+			(if (keyword? param-name)
+				true
+				(= (.getCssValue elem param-name) param-val)
+			)
 		)
 		param-evals
 	)
@@ -206,31 +210,31 @@
 )
 
 (defmulti content-matches?
-		  (fn[elem content-eval reason] 
+		  (fn[elem content-eval param-evals reason] 
 		  	 (:type (deref-eval content-eval))
 		  )
 )
 
-(defmethod content-matches? String [elem content-eval reason]
+(defmethod content-matches? String [elem content-eval param-evals reason]
 	(let [r (= (.getText elem) (:value (deref-eval content-eval)))]
-		r
+		(and r (style-matches? elem param-evals))
 	)
 )
 
-(defmethod content-matches? Boolean [elem content-eval reason]
+(defmethod content-matches? Boolean [elem content-eval param-evals reason]
 	(let [r (= (.isSelected elem) (:value (deref-eval content-eval)))]
 		r
 	)
 )
 
-(defmethod content-matches? :map [elem content-eval reason]
+(defmethod content-matches? :map [elem content-eval param-evals reason]
 	(every?
 		#(let [ename (first %) evalue (second %)]
 			(if (keyword? ename) ;ignore :type entry 
 				true
 				(let [child (find-elem elem ename)]
 					(when child
-						(content-matches? child evalue reason)
+						(content-matches? child evalue param-evals reason)
 					)
 				)
 			)
@@ -239,12 +243,12 @@
 	)
 )
 
-(defmethod content-matches? :seq [elem content-eval reason]
+(defmethod content-matches? :seq [elem content-eval param-evals reason]
 	(if (is-table? elem)
 		(let [rows (find-displayed-rows elem) row-idx (atom 0) n-rows (count rows)]
 			(every?
 				#(let [r (when (< @row-idx n-rows)
-					   		   (content-matches? (nth rows @row-idx) % reason)
+					   		   (content-matches? (nth rows @row-idx) % param-evals reason)
 					     )
 					]
 					(swap! row-idx inc)
@@ -260,7 +264,7 @@
 	)
 )
 
-(defmethod content-matches? :nil [elem content-eval reason]
+(defmethod content-matches? :nil [elem content-eval param-evals reason]
 	(if (is-table? elem)
 		(= (count (find-displayed-rows elem)) 0)
 		(do
@@ -270,7 +274,7 @@
 	)
 )
 
-(defmethod content-matches? :default [elem content-eval reason]
+(defmethod content-matches? :default [elem content-eval param-evals reason]
 	(reset! reason (str "Unsupported content type: " 
 		                (:type (deref-eval content-eval)) 
 		            )
@@ -285,7 +289,7 @@
 		  check-value (fn []
 						(if with-param
 					 		(let [reason (atom nil)
-					 			  res (content-matches? elem with-param reason)]
+					 			  res (content-matches? elem with-param param-evals reason)]
 					 			{:type Boolean :pass (when is-check? res)
 					 			 :value res :reason @reason}
 					 		)							
