@@ -206,6 +206,10 @@
 	(= (.getText elem) (:value (deref-eval content-eval)))
 )
 
+(defmethod content-matches? Boolean [elem content-eval reason]
+	(= (.isSelected elem) (:value (deref-eval content-eval)))
+)
+
 (defmethod content-matches? :map [elem content-eval reason]
 	(every?
 		#(let [ename (first %) evalue (second %)]
