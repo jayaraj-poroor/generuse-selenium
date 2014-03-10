@@ -156,6 +156,18 @@
 	) 	
 )
 
+(defn is-row?[e]
+	(when (is-web-element? e)
+		(.getAttribute e "gs-row")
+	)
+)
+
+(defn is-gs-elem?[e]
+	(when (is-web-element? e)
+		(.getAttribute e "gs")
+	)
+)
+
 (defn small-delay[obj-eval globals]
 	(try (Thread/sleep (* short-wait-secs 1000))
 		(catch InterruptedException e nil)
@@ -174,14 +186,47 @@
 	)
 )
 
-(defn find-rows[elem]
+(defn find-children[elem]
 	(try (.findElements elem 
-						(By/cssSelector "[gs-row]")
+						(By/xpath "*")
 		 )
    		 (catch NoSuchElementException e nil )
    		 (catch StaleElementReferenceException e nil)
    	)
 )
+
+(defn bfs-elems [elem is-expected-elem?]
+	(loop [ret [] queue (conj clojure.lang.PersistentQueue/EMPTY elem)]
+    	(if (seq queue)
+      		(let [elem-node (peek queue)
+      			  child-nodes (when (not (is-expected-elem? elem-node)) 
+      			  					(find-children elem-node)
+      			  			  )
+      			 ]
+      			 (if child-nodes
+        			(recur ret (into (pop queue) child-nodes))
+        			(recur (conj ret elem-node) (pop queue))
+        		 )
+        	)
+      		ret
+      	)
+    )
+)
+
+(defn find-rows[elem]
+	(bfs-elems elem is-row?)
+)
+;	(try (.findElements elem 
+;						(By/cssSelector "[gs-row]")
+;		 )
+;  		 (catch NoSuchElementException e nil )
+;   		 (catch StaleElementReferenceException e nil)
+;   	)
+
+(defn find-gs-child-elems[elem]
+	(bfs-elems elem is-gs-elem?)
+)
+;	(.findElements elem (By/cssSelector "[gs]"))
 
 (defn find-displayed-rows[elem]
 	(into []
@@ -206,6 +251,15 @@
   		   	    )
 		]
 		elem
+	)
+)
+
+(defn find-displayed-elem[elem child-name]
+	(let [child (find-elem elem child-name)]
+		(if (and child (.isDisplayed child))
+			child
+			nil
+		)
 	)
 )
 
@@ -331,9 +385,7 @@
 
 
 (defn input-batch[elem vals]
-	(let [sel 	"[gs]"
-		  elems (.findElements elem (By/cssSelector sel))
-		 ]
+	(let [elems (find-gs-child-elems elem)]
 		 (doall 
 		 	(map
 		 		#(let [name 	 (.getAttribute % "gs")
@@ -389,7 +441,7 @@
 		  browser 		(get-browser obj-eval globals)		  
 		  driver 		(get-web-driver browser)
 		  refs          (if (:elem obj-val) (:subref obj-eval)
-		  	                                (:objref obj-eval)
+		  	                                (:supref obj-eval)
 		  	            )
 		  start-elem    (if (:elem obj-val) (:elem obj-val) driver)
 		  n-refs 		(count refs)
@@ -420,7 +472,7 @@
 				 		    		)
 			 		    		)	 		    			
 		 		    		)
-				 		  	(let [ elem (find-elem elem (refs idx))]
+				 		  	(let [ elem (find-displayed-elem elem (refs idx))]
 			 		  	  		(recur  (+ idx 1) elem)
 			 		  		)
 		 		    	)
@@ -566,8 +618,7 @@
 						  )
 					 )
 			)
-			{:type Boolean :value false :pass false 
-			 :reason (str "Local storage lookup failed for key: " store-key)}
+			{:type :nil :value nil}
 		)
 	)
 )
@@ -584,7 +635,7 @@
 				(let [rows (find-displayed-rows elem)
 		  		      rnd (Random. (System/currentTimeMillis))
 			  		]
-			  		(if rows
+			  		(if (seq rows)
 			  			(do
 		  				    (def idx (.nextInt rnd (count rows)))
 		  				    {
@@ -596,7 +647,7 @@
 				  		)
 					 	{:type Boolean :pass false :value false 
 					 	 :reason (str "Web table has no rows: " 
-					 	 	          (str/join "'s" (:objref target-eval))
+					 	 	          (str/join "'s" (:supref target-eval))
 					 	 	     )
 					 	}		  			
 			  		)			  		
@@ -604,7 +655,7 @@
 			)
 		 	{:type Boolean :pass false :value false 
 		 	 :reason (str "Web element is not table: " 
-		 	 	          (str/join "'s" (:objref target-eval))
+		 	 	          (str/join "'s" (:supref target-eval))
 		 	 	     )
 		 	}
 		)
