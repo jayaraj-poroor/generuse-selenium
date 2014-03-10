@@ -198,6 +198,10 @@
 	(get-attribute e "gs-row")
 )
 
+(defn is-group?[e]
+	(get-attribute e "gs-group")
+)
+
 (defn is-gs-elem?[e]
 	(get-attribute e "gs")
 )
@@ -796,13 +800,11 @@
 		(is-row? elem)
 		(read-group elem)
 
+		(is-group? elem)
+		(read-group elem)
+
 		(is-gs-elem? elem)
-		(let [child-elems (find-gs-child-elems elem)]
-			(if (> (count child-elems) 0)
-				(read-group elem)
-				(.getText elem)
-			)
-		)
+		(.getText elem)
 
 		:else
 		(.getText elem)
