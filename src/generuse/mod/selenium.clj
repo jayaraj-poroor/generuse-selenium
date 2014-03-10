@@ -9,7 +9,7 @@
 
 (ns generuse.mod.selenium
 	(:gen-class)
-   	(:use [generuse.lib.exec :only (deref-eval defaxon to-eval)])	
+   	(:use [generuse.lib.exec :only (deref-eval defaxon to-eval is-sys-param)])	
     (:import (org.openqa.selenium.firefox FirefoxDriver)
 			 (org.openqa.selenium.chrome ChromeDriver)
 			 (org.openqa.selenium.ie InternetExplorerDriver)
@@ -39,6 +39,7 @@
 )
 
 (def short-wait-secs 2)
+(def response-iter-max 3)
 
 (defn set-driver-timeout [driver timeout]
 	(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
@@ -151,20 +152,32 @@
 )
 
 (defn is-table?[e]
-	(when (is-web-element? e) 
-	 	  (.getAttribute e "gs-table")
-	) 	
+	(try
+		(when (is-web-element? e) 
+		 	  (.getAttribute e "gs-table")
+		)
+	 	(catch NoSuchElementException e nil )
+		(catch StaleElementReferenceException e nil)	
+	)
 )
 
 (defn is-row?[e]
-	(when (is-web-element? e)
-		(.getAttribute e "gs-row")
+	(try
+		(when (is-web-element? e)
+			(.getAttribute e "gs-row")
+		)
+		(catch NoSuchElementException e nil )
+		(catch StaleElementReferenceException e nil)	
 	)
 )
 
 (defn is-gs-elem?[e]
-	(when (is-web-element? e)
-		(.getAttribute e "gs")
+	(try
+		(when (is-web-element? e)
+			(.getAttribute e "gs")
+		)
+		(catch NoSuchElementException e nil )
+		(catch StaleElementReferenceException e nil)	
 	)
 )
 
@@ -177,7 +190,7 @@
 (defn style-matches? [elem param-evals]
 	(every?
 		#(let [param-name (first %) param-val (-> % second deref-eval :value)]
-			(if (keyword? param-name)
+			(if (is-sys-param param-name)
 				true
 				(= (.getCssValue elem param-name) param-val)
 			)
@@ -489,6 +502,21 @@
 	)	
 )
 
+(defn locate-elem-retry[obj-eval, globals, short-wait?]
+	(let [elem (locate-elem obj-eval globals short-wait?)
+		  elem (if 	(is-web-element? elem) 
+		  			elem 
+		  			(do
+		  				(small-delay obj-eval globals)
+		  				(locate-elem obj-eval globals true)
+		  			)
+		  	    )
+		]
+		elem
+	)
+)
+
+
 (defaxon :web_html ["input"]														
 	(let [input-vals    (:value (deref-eval (:with param-evals)))
 		  input-vals 	(if input-vals input-vals param-evals)
@@ -539,7 +567,7 @@
 	)
 )
 
-(defaxon :web_html ["click"]
+(defn action-on-elem[target-eval param-evals ctx globals action]
 	(let [input-val     (:value (deref-eval (:with param-evals)))	
 		  elem 			(locate-elem target-eval globals false)
 		  browser 		(get-browser target-eval globals)		  
@@ -552,7 +580,15 @@
 		 (if (is-web-element? elem)
 			 (do
 			 	(try
-					(-> actions (.moveToElement elem) .click .build .perform)
+			 		(condp = action
+			 			:click
+						(-> actions (.click elem) .build .perform)
+
+			 			:double-click
+						(-> actions (.doubleClick elem) .build .perform)
+
+						(assert true)
+					)
 					(catch Exception e 
 						{:type Boolean :value false :pass false
 						 :reason (.getMessage e) :exception e
@@ -564,6 +600,14 @@
   	  		 {:type Boolean :value false :pass false :reason elem}
   	  	 )
 	)
+)
+
+(defaxon :web_html ["click"]
+	(action-on-elem target-eval param-evals ctx globals :click)
+)
+
+(defaxon :web_html ["double-click"]
+	(action-on-elem target-eval param-evals ctx globals :double-click)
 )
 
 (defaxon :web_html ["mouse-over"]
@@ -663,32 +707,29 @@
 )
 
 (defaxon :web_html ["remove"]
-	(let [elem 			 (locate-elem target-eval globals false)
-		  browser 		 (get-browser target-eval globals)		  
+	(let [browser 		 (get-browser target-eval globals)		  
 		  driver 		 (get-web-driver browser)
-		  elem 			 (when elem
- 								(set-driver-timeout driver short-wait-secs)
-		  						(try (.getLocation elem)
-		  							 (catch StaleElementReferenceException e
-		  								nil
-		  							 )
-		  							 (finally
-		 								(set-driver-timeout driver 
-		 													(:timeout @browser)
-		 								)
-		  							 )
-		  						)
-		  				 )
 		 ]
-		 (if elem
-		 	{:type Boolean :value false :pass false}
-		 	{:type Boolean :value true :pass true}
+
+		 (loop [elem (locate-elem target-eval globals false)
+		 	    count response-iter-max  
+		 	   ]
+		 	   (cond 
+		 	   	   	(not (is-web-element? elem))
+		 		   	{:type Boolean :value true :pass true}		 	   	
+		 			
+		 			(= 0 count) 
+					{:type Boolean :value true :pass true}		 	   			 		   
+
+					:else
+					(recur (locate-elem target-eval globals false) (dec count))
+		 	   )
 		 )
     )
 )
 
 (defaxon :web_html ["read"]
-	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))]
+	(let [elem 	(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))]
 		(if (is-web-element? elem)
 			{:value (.getText elem) :type String}
 		 	{:type Boolean :pass false :value false :reason elem}
@@ -696,11 +737,30 @@
 	)
 )
 
-(defaxon :web_html ["select" "is-selected?"]
-	(let [elem 	(locate-elem target-eval globals (= (:actor ctx) "_pre"))]
+(defaxon :web_html ["read-selected"]
+	(let [elem 	(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))]
 		(if (is-web-element? elem)
-			(let [is-selected? (.isSelected elem)]
-				{:type Boolean :value is-selected? :pass is-selected?}
+			{:value (.isSelected elem) :type Boolean}
+		 	{:type Boolean :pass false :value false :reason elem}
+		)
+	)
+)
+
+(defaxon :web_html ["select" "is-selected?"]
+	(let [is-check? (when (= (:action ctx) "select") true)
+		  elem 		(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))
+		  ]
+		(if (is-web-element? elem)
+			(loop [count response-iter-max is-selected? (.isSelected elem)]
+				(if (or (= count 0) is-selected?)
+					{:type Boolean :value is-selected? 
+					 :pass (when is-check? is-selected?)}
+					(do
+						(small-delay target-eval globals)
+						(recur (dec count) (.isSelected elem))
+					)
+				)
+
 			)
 		 	{:type Boolean :pass false :value false :reason elem}
 		)
