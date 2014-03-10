@@ -39,7 +39,7 @@
 )
 
 (def short-wait-secs 2)
-(def response-iter-max 3)
+(def response-iter-max 2)
 
 (defn set-driver-timeout [driver timeout]
 	(-> driver .manage .timeouts (.implicitlyWait timeout TimeUnit/SECONDS))
@@ -151,34 +151,55 @@
 	(instance? WebElement e)
 )
 
-(defn is-table?[e]
+(defn debug-print-elem[msg, e]
+	(println msg ": "
+		     "gs-name: " (.getAttribute e "gs") 
+		     "gs-table: " (not (nil? (.getAttribute e "gs-table")))
+			 "gs-row: " (not (nil? (.getAttribute e "gs-row")))
+	)
+)
+
+(defn debug-print-rows[msg, rows]
+	(println msg)
+	(doall 
+		(map
+			(partial debug-print-elem "row: ")
+		    rows
+		)
+	)	
+)
+
+(defn get-tag-name[e]
 	(try
 		(when (is-web-element? e) 
-		 	  (.getAttribute e "gs-table")
+		 	  (.getTagName e)
 		)
 	 	(catch NoSuchElementException e nil )
 		(catch StaleElementReferenceException e nil)	
 	)
 )
 
-(defn is-row?[e]
+(defn get-attribute[e, attrib]
 	(try
-		(when (is-web-element? e)
-			(.getAttribute e "gs-row")
+		(when (is-web-element? e) 
+		 	  (.getAttribute e attrib)
 		)
-		(catch NoSuchElementException e nil )
+	 	(catch NoSuchElementException e nil )
 		(catch StaleElementReferenceException e nil)	
 	)
 )
 
+
+(defn is-table?[e]
+	(get-attribute e "gs-table")
+)
+
+(defn is-row?[e]
+	(get-attribute e "gs-row")
+)
+
 (defn is-gs-elem?[e]
-	(try
-		(when (is-web-element? e)
-			(.getAttribute e "gs")
-		)
-		(catch NoSuchElementException e nil )
-		(catch StaleElementReferenceException e nil)	
-	)
+	(get-attribute e "gs")
 )
 
 (defn small-delay[obj-eval globals]
@@ -209,25 +230,36 @@
 )
 
 (defn bfs-elems [elem is-expected-elem?]
-	(loop [ret [] queue (conj clojure.lang.PersistentQueue/EMPTY elem)]
-    	(if (seq queue)
-      		(let [elem-node (peek queue)
-      			  child-nodes (when (not (is-expected-elem? elem-node)) 
-      			  					(find-children elem-node)
-      			  			  )
-      			 ]
-      			 (if child-nodes
-        			(recur ret (into (pop queue) child-nodes))
-        			(recur (conj ret elem-node) (pop queue))
-        		 )
-        	)
-      		ret
-      	)
+	(let [child-nodes (find-children elem)]
+		(if (seq child-nodes)
+			(loop [ret [] 
+				   queue (apply conj clojure.lang.PersistentQueue/EMPTY
+				   					 child-nodes
+				   	     )
+				  ]
+		    	(if (seq queue)
+		      		(let [elem-node (peek queue)
+		      			  child-nodes (when (not (is-expected-elem? elem-node)) 
+		      			  					(find-children elem-node)
+		      			  			  )
+		      			 ]
+		      			 (if child-nodes
+		        			(recur ret (into (pop queue) child-nodes))
+		        			(recur (conj ret elem-node) (pop queue))
+		        		 )
+		        	)
+	        		ret
+		      	)
+		    )
+		    []
+		)
     )
 )
 
 (defn find-rows[elem]
-	(bfs-elems elem is-row?)
+	(let [rows (bfs-elems elem is-row?)]
+		rows
+	)
 )
 ;	(try (.findElements elem 
 ;						(By/cssSelector "[gs-row]")
@@ -728,19 +760,59 @@
     )
 )
 
-(defaxon :web_html ["read"]
-	(let [elem 	(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))]
-		(if (is-web-element? elem)
-			{:value (.getText elem) :type String}
-		 	{:type Boolean :pass false :value false :reason elem}
+(declare read-elem)
+
+(defn read-group[elem]
+	(let [child-elems (find-gs-child-elems elem)]
+		(apply merge
+			(map
+				#(hash-map (get-attribute % "gs") (read-elem %))
+				child-elems
+			)
 		)
 	)
 )
 
-(defaxon :web_html ["read-selected"]
+(defn read-elem[elem] 
+	(cond 
+		(nil? elem)
+		nil
+
+		(= (get-tag-name elem) "input")
+		(if (#{"checkbox", "radio"} (get-attribute elem "type"))
+			(.isSelected elem)
+			(.getText elem)
+		)
+
+		(is-table? elem)
+		(let [seq-value (map
+							#(read-elem %)
+							(find-rows elem)
+						)
+			]
+			seq-value
+		)
+
+		(is-row? elem)
+		(read-group elem)
+
+		(is-gs-elem? elem)
+		(let [child-elems (find-gs-child-elems elem)]
+			(if (> (count child-elems) 0)
+				(read-group elem)
+				(.getText elem)
+			)
+		)
+
+		:else
+		(.getText elem)
+	)
+)
+
+(defaxon :web_html ["read"]
 	(let [elem 	(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))]
 		(if (is-web-element? elem)
-			{:value (.isSelected elem) :type Boolean}
+			(to-eval (read-elem elem))
 		 	{:type Boolean :pass false :value false :reason elem}
 		)
 	)
