@@ -457,9 +457,12 @@
 
 (defn to-index[sel-spec row-elems]
 	(condp = sel-spec
-		"first" 	0
-		"second" 	1
-		"last"      (dec (count row-elems))
+		"first" 		0
+		"first-item" 	0
+		"second" 		1
+		"second-item" 	1
+		"last"     		(dec (count row-elems))
+		"last-item"     (dec (count row-elems))
 		(let [n (re-find #"\d+" sel-spec)
 			  n (try (Long/parseLong n) (catch NumberFormatException e 0))
 			 ]
