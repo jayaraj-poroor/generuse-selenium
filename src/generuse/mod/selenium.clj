@@ -823,15 +823,20 @@
 	)
 )
 
-(defaxon :web_html ["select" "is-selected?"]
-	(let [is-check? (when (= (:action ctx) "select") true)
-		  elem 		(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))
+(defaxon :web_html ["select" "is-selected?" "unselect" "is-unselected?"]
+	(let [check-actions 	#{"select" "unselect"}
+		  select-actions	#{"select" "is-selected?"} 
+		  expected-state    (if (select-actions (:action ctx)) true false) 
+		  is-check? 		(check-actions (:action ctx))
+		  elem 				(locate-elem-retry target-eval globals 
+		  									   (= (:actor ctx) "_pre")
+		  					)
 		  ]
 		(if (is-web-element? elem)
 			(loop [count response-iter-max is-selected? (.isSelected elem)]
 				(if (or (= count 0) is-selected?)
-					{:type Boolean :value is-selected? 
-					 :pass (when is-check? is-selected?)}
+					{:type Boolean :value (= is-selected?  expected-state)
+					 :pass (when is-check? (= is-selected? expected-state))}
 					(do
 						(small-delay target-eval globals)
 						(recur (dec count) (.isSelected elem))
