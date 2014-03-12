@@ -814,7 +814,7 @@
 	)
 )
 
-(defaxon :web_html ["read"]
+(defaxon :web_html ["read" "let"]
 	(let [elem 	(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))]
 		(if (is-web-element? elem)
 			(to-eval (read-elem elem))
