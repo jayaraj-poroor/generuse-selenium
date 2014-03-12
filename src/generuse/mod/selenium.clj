@@ -834,7 +834,7 @@
 		  ]
 		(if (is-web-element? elem)
 			(loop [count response-iter-max is-selected? (.isSelected elem)]
-				(if (or (= count 0) is-selected?)
+				(if (or (= count 0) (= is-selected? expected-state))
 					{:type Boolean :value (= is-selected?  expected-state)
 					 :pass (when is-check? (= is-selected? expected-state))}
 					(do
