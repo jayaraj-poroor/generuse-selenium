@@ -818,7 +818,7 @@
 	(let [elem 	(locate-elem-retry target-eval globals (= (:actor ctx) "_pre"))]
 		(if (is-web-element? elem)
 			(to-eval (read-elem elem))
-		 	{:type Boolean :pass false :value false :reason elem}
+		 	{:type :nil :value nil}
 		)
 	)
 )
